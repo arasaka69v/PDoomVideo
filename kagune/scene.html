@@ -410,6 +410,7 @@ function portrait(who, x, y, s, t, mouth, o = {}) {
 // ---------- сцены ----------
 // каждая сцена: (lt — время в кадре, d — длина кадра, p — параметры, S — сам кадр)
 const SC = {};
+const blurCv = document.createElement('canvas'); blurCv.width = 160; blurCv.height = 90; const blurCtx = blurCv.getContext('2d');
 
 SC.black = (lt, d, p) => {
   fill('#000');
@@ -674,7 +675,11 @@ function mouthOf(S, lt, who) {
 }
 
 SC.talk = (lt, d, p, S) => {
-  c.save(); c.filter = 'blur(6px) brightness(0.55)'; (BG[p.bg] || BG.street)(lt); c.restore();
+  c.save(); (BG[p.bg] || BG.street)(lt); c.restore();
+  // дешёвое размытие: уменьшить и растянуть обратно
+  blurCtx.drawImage(cv, 0, 0, 160, 90); blurCtx.drawImage(blurCv, 0, 0, 160, 90, 0, 0, 80, 45);
+  c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+  c.drawImage(blurCv, 0, 0, 80, 45, 0, 0, W, H); fill('rgba(0,0,0,0.45)');
   const ln = activeLine(S, lt);
   const kaiTalks = ln && ln.who === 'kai';
   const hasKai = S.lines.some(l => l.who === 'kai');
