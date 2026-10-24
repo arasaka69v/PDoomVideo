@@ -33,10 +33,10 @@ async function segment(browser, a, b, file) {
   for (let f = a; f < b; f++) {
     const buf = await frameJpeg(p, f);
     if (!ff.stdin.write(buf)) await new Promise(r => ff.stdin.once('drain', r));
-    if ((f - a) % 300 === 0) console.log(`  ep${EP} [${a}-${b}] ${f - a}/${b - a}`);
   }
   ff.stdin.end();
   await new Promise(r => ff.on('close', r));
+  await p.close();
 }
 
 const browser = await chromium.launch({ args: ['--disable-gpu-vsync', '--font-render-hinting=none'] });
@@ -50,11 +50,20 @@ if (preview) {
   }
   console.log('preview done');
 } else {
-  const per = Math.ceil(TOTAL / WORKERS);
-  const parts = [];
-  await Promise.all(Array.from({ length: WORKERS }, (_, i) => {
-    const file = path.join(dir, `part${i}.mp4`); parts.push(file);
-    return segment(browser, i * per, Math.min(TOTAL, (i + 1) * per), file);
+  // короткие куски по CHUNK кадров; готовые пропускаются — рендер можно прерывать и продолжать
+  const CHUNK = 450, parts = [], todo = [];
+  for (let a = 0, i = 0; a < TOTAL; a += CHUNK, i++) {
+    const file = path.join(dir, `chunk${String(i).padStart(3, '0')}.mp4`); parts.push(file);
+    if (!fs.existsSync(file)) todo.push([a, Math.min(TOTAL, a + CHUNK), file]);
+  }
+  console.log(`ep${EP}: ${todo.length}/${parts.length} chunks to render`);
+  await Promise.all(Array.from({ length: WORKERS }, async () => {
+    while (todo.length) {
+      const [a, b, file] = todo.shift();
+      await segment(browser, a, b, file + '.tmp.mp4');
+      fs.renameSync(file + '.tmp.mp4', file);
+      console.log(`  ep${EP} chunk ${path.basename(file)} ok`);
+    }
   }));
   fs.writeFileSync(path.join(dir, 'parts.txt'), parts.map(f => `file '${path.resolve(f)}'`).join('\n'));
   const out = path.join(dir, `kagune_ep${EP}.mp4`);
