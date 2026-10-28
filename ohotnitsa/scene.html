@@ -1,0 +1,537 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Охотница</title>
+<style>html,body{margin:0;background:#000}canvas{display:block}</style></head>
+<body><canvas id="cv" width="1080" height="1920"></canvas>
+<script>
+// «ОХОТНИЦА» — вертикальные кадры 1080×1920 для TikTok. window.draw(frame).
+const W = 1080, H = 1920;
+const cv = document.getElementById('cv');
+const c = cv.getContext('2d');
+let TL = null, FPS = 30;
+</script>
+<script src="lib.js"></script>
+<script>
+// ---------- герои ----------
+Object.assign(LOOK, {
+  mark:  { hair: '#0b0b10', coat: '#121218', rim: RED, eyes: ['#8a96a6', '#8a96a6'], hood: true },
+  nika:  { hair: '#2a1a14', coat: '#e8eef6', rim: '#8fd3ff', eyes: ['#5ab0ff', '#5ab0ff'], bob: true, scarf: '#c8d4e4' },
+  grach: { hair: '#050505', coat: '#0c0c10', rim: '#dfe6ff', eyes: ['#9ab', '#9ab'], slick: true, long: true, scar: true },
+  sova:  { hair: '#2a1a0a', coat: '#1c140c', rim: '#ffb030', eyes: ['#ffb030', '#ffb030'], owl: true },
+  beast: { hair: '#050505', coat: '#070707', rim: '#ff5020', eyes: ['kakugan', 'kakugan'] },
+  white: { hair: '#222', coat: '#dfe4ec', rim: '#cfe6ff', eyes: [null, null] },
+});
+const BLUE = '#7fd0ff';
+function fitText(str, x, y, size, maxW, col, o = {}) {
+  c.save(); c.font = `bold ${size}px "DejaVu Sans", sans-serif`; if (o.spacing) c.letterSpacing = o.spacing + 'px';
+  const w = c.measureText(str).width; c.restore();
+  text(str, x, y, w > maxW ? size * maxW / w : size, col, o);
+}
+
+const blurCv = document.createElement('canvas'); blurCv.width = 108; blurCv.height = 192;
+const blurCtx = blurCv.getContext('2d');
+function blurred(drawFn, lt, dark = 0.45) {
+  drawFn(lt);
+  blurCtx.drawImage(cv, 0, 0, 108, 192);
+  c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+  c.drawImage(blurCv, 0, 0, 108, 192, 0, 0, W, H);
+  fill(`rgba(0,0,0,${dark})`);
+}
+function shake(amount, lt) { c.translate((hash(lt * 97) - 0.5) * amount, (hash(lt * 61) - 0.5) * amount); }
+function city(lt, o = {}) {
+  c.save(); c.translate(0, o.y ?? H * 0.62); c.scale(1.9, 1.9); c.translate(0, -720);
+  skyline(lt, { base: 720, pan: o.pan ?? lt * 8 + 200, dawn: o.dawn });
+  c.restore();
+}
+function speedLines(lt, n = 40, a = 0.12, radial = true) {
+  c.save(); c.strokeStyle = `rgba(255,255,255,${a})`; c.lineWidth = 3;
+  for (let i = 0; i < n; i++) {
+    const ang = hash(i + Math.floor(lt * 12)) * 6.28, r0 = 420 + hash(i * 3) * 200;
+    c.beginPath(); c.moveTo(W / 2 + Math.cos(ang) * r0, H / 2 + Math.sin(ang) * r0); c.lineTo(W / 2 + Math.cos(ang) * 1400, H / 2 + Math.sin(ang) * 1400); c.stroke();
+  }
+  c.restore();
+}
+
+// ---------- фоны ----------
+const BG = {
+  cafe(lt) {
+    vgrad([[0, '#140c14'], [1, '#2a1620']]);
+    // окно с дождём
+    c.fillStyle = '#070912'; c.fillRect(90, 260, 900, 760);
+    c.save(); c.beginPath(); c.rect(90, 260, 900, 760); c.clip(); city(lt, { y: 1030, pan: 300 }); rain(lt, 260, 0.25, 0.04); c.restore();
+    c.strokeStyle = '#2a1a1a'; c.lineWidth = 24; c.strokeRect(90, 260, 900, 760); c.beginPath(); c.moveTo(540, 260); c.lineTo(540, 1020); c.stroke();
+    // неон
+    glow('#ff3a7a', 40); text('КОФЕ  24/7', 540, 190, 84, '#ff7aa8', { spacing: 10 }); noGlow();
+    // лампы
+    for (const x of [270, 810]) { const g = c.createRadialGradient(x, 1080, 10, x, 1250, 520); g.addColorStop(0, 'rgba(255,190,120,0.55)'); g.addColorStop(1, 'rgba(255,190,120,0)'); c.fillStyle = g; c.fillRect(0, 900, W, 900); }
+    c.fillStyle = '#1a0f0c'; c.fillRect(0, 1500, W, 420);
+  },
+  street(lt) { vgrad([[0, '#07070f'], [1, '#161226']]); city(lt, { y: 1300 }); c.fillStyle = '#0b0a10'; c.fillRect(0, 1300, W, 620); rain(lt, 180, 0.15); },
+  alley(lt) { alleyV(lt, 0.7); },
+  room(lt) {
+    vgrad([[0, '#14121a'], [1, '#221c24']]);
+    c.fillStyle = '#0c0b10'; c.fillRect(140, 320, 520, 1260);
+    const g = c.createRadialGradient(840, 500, 10, 840, 600, 700); g.addColorStop(0, 'rgba(255,210,150,0.45)'); g.addColorStop(1, 'rgba(255,210,150,0)'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+  },
+  roof(lt) {
+    vgrad([[0, '#05030c'], [0.6, '#1c0a1a'], [1, '#2a0a14']]);
+    moon(W * 0.62, 560, 170, '#ffe6ea');
+    city(lt, { y: 1500, pan: 700 });
+    c.fillStyle = '#060508'; c.fillRect(0, 1480, W, 440);
+    for (let i = 0; i < 4; i++) { c.save(); c.globalCompositeOperation = 'lighter'; const a = 1.2 + Math.sin(lt * 1.1 + i * 1.7) * 0.35; c.fillStyle = 'rgba(200,220,255,0.06)'; c.beginPath(); c.moveTo(i * 300, H); c.lineTo(i * 300 + Math.cos(-a) * 2500 - 120, H + Math.sin(-a) * 2500); c.lineTo(i * 300 + Math.cos(-a) * 2500 + 120, H + Math.sin(-a) * 2500); c.fill(); c.restore(); }
+  },
+};
+
+function alleyV(lt, lamp = 1) {
+  vgrad([[0, '#06060a'], [1, '#100e14']]);
+  const vx = W / 2, vy = H * 0.42;
+  c.fillStyle = '#0b0b10'; c.beginPath(); c.moveTo(0, 0); c.lineTo(vx - 110, vy - 300); c.lineTo(vx - 110, vy + 200); c.lineTo(0, H); c.fill();
+  c.fillStyle = '#09090d'; c.beginPath(); c.moveTo(W, 0); c.lineTo(vx + 110, vy - 300); c.lineTo(vx + 110, vy + 200); c.lineTo(W, H); c.fill();
+  c.fillStyle = '#100e15'; c.beginPath(); c.moveTo(0, H); c.lineTo(vx - 110, vy + 200); c.lineTo(vx + 110, vy + 200); c.lineTo(W, H); c.fill();
+  for (let i = 0; i < 5; i++) { const k = i / 5; c.fillStyle = 'rgba(255,255,255,0.025)'; c.fillRect(lerp(0, vx - 110, k), lerp(0, vy - 300, k), 14, lerp(H, vy + 200, k) - lerp(0, vy - 300, k)); }
+  const fl = lamp * (hash(Math.floor(lt * 12)) > 0.1 ? 1 : 0.25), lx = vx + 40, ly = vy - 200;
+  const g = c.createRadialGradient(lx, ly, 5, lx, ly + 300, 800); g.addColorStop(0, `rgba(255,190,130,${0.5 * fl})`); g.addColorStop(1, 'rgba(255,190,130,0)');
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  c.fillStyle = `rgba(255,220,170,${fl})`; c.fillRect(lx - 16, ly - 4, 32, 8);
+  c.fillStyle = `rgba(255,190,130,${0.14 * fl})`; c.beginPath(); c.ellipse(vx, H - 300, 300, 40, 0, 0, 7); c.fill();
+}
+
+// ---------- сцены ----------
+const SC = {};
+const lineAt = (S, lt) => S.lines.find(l => lt >= l.t0 - S.t0 - 0.05 && lt <= l.t1 - S.t0 + 0.05);
+function mouthOf(S, lt, who) {
+  const ln = lineAt(S, lt);
+  if (!ln) return 0;
+  const speaker = ln.who === 'narr' ? null : ln.who;
+  if (speaker !== who) return 0;
+  return ln.env[clamp(Math.floor((lt - (ln.t0 - S.t0)) * FPS), 0, ln.env.length - 1)] || 0;
+}
+
+SC.hook = (lt, d, p) => {
+  fill('#050002');
+  const pulse = Math.pow(Math.abs(Math.sin(lt * 4.3)), 8);
+  const g = c.createRadialGradient(W / 2, H * 0.75, 50, W / 2, H * 0.75, 1200);
+  g.addColorStop(0, `rgba(200,0,30,${0.35 + 0.25 * pulse})`); g.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+  c.save(); shake(pulse * 10, lt);
+  kagune(W / 2, H + 80, { n: 4, t: lt, len: 1300 * easeOut(lt / 1.2), spread: 0.65, width: 70, blur: 50 });
+  figure(W / 2, H + 120, 900, 'mark', { t: lt, glow: 40, eyes: ['kakugan', 'kakugan'] });
+  c.restore();
+  p.lines.forEach((s, i) => {
+    const a = smooth(0.08 + i * 0.35, 0.25 + i * 0.35, lt), sc = 1 + (1 - a) * 0.6;
+    c.save(); c.globalAlpha = a; c.translate(W / 2, 470 + i * 130); c.scale(sc, sc);
+    fitText(s, 0, 0, 96, 960, '#fff', { stroke: 12, strokeCol: '#000', spacing: 2 }); c.restore();
+  });
+  const pa = smooth(1.2, 1.35, lt);
+  if (pa > 0) {
+    const jit = lt < 1.8 ? (hash(Math.floor(lt * 30)) - 0.5) * 24 : 0, sc = 1 + (1 - pa) * 1.5;
+    c.save(); c.globalAlpha = pa; c.translate(W / 2 + jit, 760); c.scale(sc, sc);
+    fitText(p.punch, 6, 0, 170, 940, 'rgba(0,220,255,0.45)', { spacing: 6 });
+    fitText(p.punch, 0, 0, 170, 940, RED, { stroke: 14, strokeCol: '#000', spacing: 6, glow: RED, blur: 50 });
+    c.restore();
+  }
+  if (lt > 1.2 && lt < 1.32) fill('rgba(255,255,255,0.6)');
+  vignette(0.85);
+};
+
+SC.cafe = (lt, d) => {
+  BG.cafe(lt);
+  // стол и чашки
+  c.fillStyle = '#3a2418'; c.beginPath(); c.ellipse(W / 2, 1560, 470, 90, 0, 0, 7); c.fill();
+  for (const [x, col] of [[400, '#f0e6dc'], [690, '#f0e6dc']]) {
+    c.fillStyle = col; c.fillRect(x - 40, 1470, 80, 80); c.beginPath(); c.ellipse(x, 1470, 40, 12, 0, 0, 7); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,0.25)'; c.lineWidth = 4;
+    for (let k = 0; k < 3; k++) { c.beginPath(); c.moveTo(x - 15 + k * 15, 1450); c.bezierCurveTo(x - 30 + k * 15 + Math.sin(lt * 2 + k) * 15, 1390, x + k * 10, 1360, x - 10 + k * 15 + Math.sin(lt * 1.5 + k) * 20, 1300); c.stroke(); }
+  }
+  figure(250, 1560, 620, 'nika', { t: lt, pose: 'sit', facing: 1, glow: 22 });
+  figure(830, 1560, 650, 'mark', { t: lt, pose: 'sit', facing: -1, glow: 18, noHood: false });
+  vignette(0.7);
+};
+
+SC.face = (lt, d, p, S) => {
+  const bg = BG[p.bg] || BG.street;
+  c.save(); if (p.hurt) shake(Math.max(0, 1 - lt * 2) * 30, lt);
+  blurred(bg, lt, 0.5);
+  if (p.alarm) { const s = Math.sin(lt * 9) > 0; fill(s ? 'rgba(255,0,30,0.22)' : 'rgba(0,80,255,0.22)'); }
+  if (p.red) { const g = c.createRadialGradient(W / 2, H * 0.55, 100, W / 2, H * 0.55, 1100); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(160,0,20,0.55)'); c.fillStyle = g; c.fillRect(0, 0, W, H); }
+  const zoom = 1 + lt * 0.015;
+  const ln = lineAt(S, lt) || S.lines.filter(l => l.t0 - S.t0 <= lt).pop();
+  const who = ln && ln.who !== 'narr' && LOOK[ln.who] ? ln.who : p.who;
+  const kak = who === 'mark' && !p.lens;
+  portrait(who, W / 2 + Math.sin(lt * 0.5) * 8, 960, 2.7 * zoom, lt, mouthOf(S, lt, who === 'mark' ? 'mark' : who), { kakugan: kak, hurt: p.hurt });
+  if (who === 'mark' && p.lens) {  // блик линзы
+    const a = 0.25 + 0.2 * Math.sin(lt * 3);
+    c.strokeStyle = `rgba(255,60,80,${a})`; c.lineWidth = 3;
+    for (const ex of [-32, 32]) { c.beginPath(); c.arc(W / 2 + (ex + 2) * 2.7 * zoom, 960 + (-43) * 2.7 * zoom, 24 * zoom, 0, 7); c.stroke(); }
+  }
+  c.restore();
+  vignette(0.7);
+};
+
+SC.window = (lt, d) => {
+  BG.cafe(lt);
+  // тень за окном и трещина стекла
+  const k = smooth(0.1, 0.5, lt);
+  c.save(); c.globalAlpha = 0.9 * (1 - smooth(0.6, 1.2, lt)); figure(lerp(-100, W + 100, k), 980, 520, 'beast', { t: lt, pose: 'walk', glow: 20 }); c.restore();
+  if (lt > 0.2) {
+    c.strokeStyle = 'rgba(230,240,255,0.8)'; c.lineWidth = 3; const cx = 700, cy = 600;
+    for (let i = 0; i < 12; i++) { const a = i / 12 * 6.28; c.beginPath(); c.moveTo(cx, cy); let x = cx, y = cy; for (let j = 0; j < 5; j++) { x += Math.cos(a) * 60 + vnoise(i * 7 + j) * 30; y += Math.sin(a) * 60 + vnoise(i * 3 + j) * 30; c.lineTo(x, y); } c.stroke(); }
+  }
+  const s = Math.sin(lt * 9) > 0; fill(s ? 'rgba(255,0,30,0.15)' : 'rgba(0,80,255,0.15)');
+  figure(250, 1560, 620, 'nika', { t: lt, pose: lt > 1.4 ? 'stand' : 'sit', facing: 1, glow: 22 });
+  figure(830, 1560, 650, 'mark', { t: lt, pose: 'sit', facing: -1, glow: 18 });
+  vignette(0.7);
+};
+
+SC.alley = (lt, d, p, S) => {
+  c.save(); shake(lt > 2.2 && lt < 2.6 ? 25 : 0, lt);
+  alleyV(lt);
+  const gy = 1700;
+  // гуль нависает
+  const bx = 640, rise = easeOut(lt / 1.5);
+  kagune(bx, gy - 700, { n: 3, t: lt, len: 900 * rise, base: -Math.PI / 2 - 0.3, spread: 0.9, width: 60, col: '#ff4a14', dark: '#200', tip: '#ffb070', blur: 40 });
+  figure(bx, gy, 1050, 'beast', { t: lt, pose: 'hunch', facing: -1, glow: 30 });
+  // Ника отброшена, кейс-оружие отлетает
+  const fallen = lt > 2.2;
+  figure(260, gy + 40, 520, 'nika', { t: lt, pose: fallen ? 'kneel' : 'stand', facing: 1, glow: 22, arm: fallen ? 'down' : 'forward' });
+  if (!fallen) blade(330, gy - 330, -0.3, 300, lt);
+  else { const u = lt - 2.2; blade(330 + u * 900, gy - 330 - u * 900 + u * u * 1300, -0.3 + u * 10, 300, lt); }
+  c.restore();
+  rain(lt, 260, 0.25);
+  if (lt > 2.2 && lt < 2.35) fill('rgba(255,255,255,0.35)');
+  vignette(0.85);
+};
+
+SC.eye = (lt, d, p) => {
+  fill('#0a0809');
+  const nika = p.who === 'nika';
+  c.save(); c.translate(W / 2, H / 2); c.scale(1.35 + lt * 0.03, 1.35 + lt * 0.03);
+  const sk = c.createRadialGradient(0, 0, 50, 0, 0, 900); sk.addColorStop(0, nika ? '#7a6560' : '#5a4a50'); sk.addColorStop(1, '#0c0809');
+  c.fillStyle = sk; c.fillRect(-W, -H, W * 2, H * 2);
+  const k = nika ? smooth(d * 0.35, d * 0.9, lt) : smooth(d * 0.5, d * 0.95, lt);
+  c.beginPath(); c.moveTo(-380, 0); c.quadraticCurveTo(0, -240, 380, -10); c.quadraticCurveTo(0, 210, -380, 0); c.closePath();
+  c.save(); c.clip();
+  c.fillStyle = `rgb(${lerp(232, 6, k)},${lerp(234, 0, k)},${lerp(238, 4, k)})`; c.fillRect(-500, -300, 1000, 600);
+  c.strokeStyle = `rgba(${lerp(170, 255, k)},0,30,${0.3 + 0.5 * k})`; c.lineWidth = 2.5;
+  for (let i = 0; i < 14; i++) { const a = i / 14 * 6.28; c.beginPath(); let x = Math.cos(a) * 380, y = Math.sin(a) * 180; c.moveTo(x, y); for (let j = 0; j < 6; j++) { x *= 0.82; y *= 0.82; x += vnoise(i * 9 + j) * 18; y += vnoise(i * 4 + j) * 18; c.lineTo(x, y); } c.stroke(); }
+  const base = nika ? [60, 140, 230] : [70, 85, 105];
+  const ic = base.map((v, i) => Math.round(lerp(v, [255, 20, 40][i], k)));
+  const ir = c.createRadialGradient(0, 0, 20, 0, 0, 120); ir.addColorStop(0, `rgb(${ic})`); ir.addColorStop(1, '#000');
+  glow(k > 0.4 ? RED : '#000', 60 * k); c.fillStyle = ir; c.beginPath(); c.arc(0, 0, 120, 0, 7); c.fill(); noGlow();
+  c.strokeStyle = 'rgba(0,0,0,0.35)'; c.lineWidth = 2;
+  for (let i = 0; i < 40; i++) { const a = i / 40 * 6.28; c.beginPath(); c.moveTo(Math.cos(a) * 36, Math.sin(a) * 36); c.lineTo(Math.cos(a) * 118, Math.sin(a) * 118); c.stroke(); }
+  c.fillStyle = '#000'; c.beginPath(); c.ellipse(0, 0, lerp(40, 14, k), lerp(42, 48, k), 0, 0, 7); c.fill();
+  if (!nika) { c.strokeStyle = `rgba(200,220,255,${0.45 * (1 - k)})`; c.lineWidth = 3; c.beginPath(); c.arc(0, 0, 135, 0, 7); c.stroke(); } // линза
+  c.fillStyle = 'rgba(255,255,255,0.75)'; c.beginPath(); c.ellipse(-42, -46, 20, 13, -0.5, 0, 7); c.fill();
+  c.restore();
+  c.strokeStyle = '#000'; c.lineWidth = 9; c.beginPath(); c.moveTo(-380, 0); c.quadraticCurveTo(0, -240, 380, -10); c.stroke();
+  c.restore();
+  if (!nika) { // обратный отсчёт
+    const n = lt < d * 0.45 ? 2 : lt < d * 0.8 ? 1 : 0;
+    if (n) { const u = (lt % (d * 0.4)) / (d * 0.4); c.save(); c.globalAlpha = 1 - u * 0.6; text(String(n), W / 2, 520, 260 * (1.2 - u * 0.2), '#fff', { stroke: 14, glow: RED, blur: 40 }); c.restore(); }
+  }
+  vignette(0.9);
+};
+
+SC.reveal = (lt, d, p) => {
+  vgrad([[0, '#100206'], [0.7, '#3a0610'], [1, '#600a18']]);
+  if (p.land) BG.roof(lt), fill('rgba(60,0,10,0.35)');
+  moon(W / 2, 640, 280, '#ff2a3a', p.land ? 0.5 : 0.9);
+  const land = p.land ? easeOut(clamp(lt / 0.35)) : 1;
+  const k = smooth(0.25, 1.4, lt);
+  c.save(); shake((1 - smooth(0, 1.2, lt)) * 30, lt);
+  c.translate(0, (1 - land) * -1600);
+  for (let i = 0; i < 4; i++) {
+    const gi = smooth(0.3 + i * 0.18, 0.9 + i * 0.18, lt);
+    kagune(W / 2 + (i % 2 ? 24 : -24), 1300, { n: 1, t: lt + i, len: 1150 * gi, base: -Math.PI / 2 + ((i / 3) * 2 - 1) * 0.75, spread: 0, width: 90, blur: 45, wiggle: 0.9, seed: i * 4 });
+  }
+  portrait('mark', W / 2, 1150, 2.3, lt, 0, { kakugan: true, mask: p.mask !== false && !p.land });
+  c.restore();
+  if (p.land && lt > 0.33 && lt < 0.6) { c.strokeStyle = `rgba(255,220,200,${1 - (lt - 0.33) * 3.5})`; c.lineWidth = 10; c.beginPath(); c.ellipse(W / 2, 1900, (lt - 0.33) * 2400, (lt - 0.33) * 300, 0, 0, 7); c.stroke(); }
+  if (lt > 0.3 && lt < 0.42) fill('rgba(255,40,60,0.5)');
+  speedLines(lt, 30, 0.08 * k);
+  vignette(0.85);
+};
+
+SC.smash = (lt, d, p) => {
+  const wingsMode = p.wings;
+  const beat = 0.6, bi = Math.floor(lt / beat), bt = (lt % beat) / beat;
+  c.save(); shake(Math.max(0, 1 - bt * 4) * 40, lt + bi);
+  if (wingsMode) BG.roof(lt); else alleyV(lt, 0.4);
+  fill('rgba(30,0,8,0.4)');
+  const ex = W / 2, ey = 760;
+  // враг
+  if (wingsMode) { figure(ex, ey + 520, 620, 'grach', { t: lt, pose: bi > 1 ? 'kneel' : 'stand', facing: -1, glow: 30 }); blade(ex - 70, ey + 180, 2.4 - bi * 0.4, 340, lt); }
+  else figure(ex, ey + 700, 1050, 'beast', { t: lt, pose: bi > 2 ? 'kneel' : 'hunch', facing: -1, glow: 25 });
+  // удары снизу
+  const hit = Math.sin(Math.PI * clamp(bt * 1.7));
+  if (wingsMode) {
+    for (let i = 0; i < 18; i++) { const u = clamp(bt * 1.6 - i * 0.02); const x = lerp(200 + hash(i) * 700, ex + (hash(i + 3) - 0.5) * 200, u), y = lerp(1800, ey + 300, u);
+      c.save(); c.translate(x, y); c.rotate(-1.4 + hash(i) * 0.6); glow(BLUE, 30); c.fillStyle = 'rgba(160,225,255,0.9)'; c.beginPath(); c.moveTo(0, -60); c.lineTo(12, 0); c.lineTo(0, 60); c.lineTo(-12, 0); c.fill(); noGlow(); c.restore(); }
+    kagune(W * 0.2, 1850, { n: 3, t: lt, len: 1200, base: -1.2, spread: 0.4, width: 60, target: { x: ex, y: ey + 300, k: hit * (bi % 2) }, blur: 40 });
+  } else {
+    kagune(W / 2, 1950, { n: 4, t: lt, len: 1300, base: -Math.PI / 2, spread: 0.6, width: 80, target: { x: ex + (bi % 2 ? 80 : -80), y: ey + 200, k: hit }, blur: 45, wiggle: 1.6 });
+  }
+  c.restore();
+  if (bt < 0.12) {
+    fill(`rgba(255,${wingsMode ? 230 : 80},${wingsMode ? 255 : 90},${0.45 * (1 - bt / 0.12)})`);
+    c.strokeStyle = '#fff'; c.lineWidth = 5; glow('#fff', 20);
+    for (let i = 0; i < 16; i++) { const a = hash(bi * 30 + i) * 6.28, l = 80 + hash(bi + i) * 220; c.beginPath(); c.moveTo(ex, ey + 250); c.lineTo(ex + Math.cos(a) * l, ey + 250 + Math.sin(a) * l); c.stroke(); }
+    noGlow();
+  }
+  speedLines(lt, 50, 0.12);
+  vignette(0.85);
+};
+
+SC.leave = (lt, d) => {
+  alleyV(lt, 0.6);
+  const k = lt / d;
+  figure(W / 2 + 40, lerp(1550, 1050, k), lerp(600, 260, k), 'mark', { t: lt, pose: 'walk', facing: 1, glow: 18 });
+  figure(250, 1720, 420, 'nika', { t: lt, pose: 'kneel', facing: 1, glow: 18 });
+  // осколок маски на асфальте
+  const z = 1 + smooth(d * 0.7, d, lt) * 1.4;
+  c.save(); c.translate(780, 1640); c.scale(z, z); c.rotate(0.3);
+  c.fillStyle = '#ece8ee'; c.beginPath(); c.moveTo(-40, -10); c.lineTo(30, -24); c.lineTo(46, 8); c.lineTo(-10, 22); c.fill();
+  c.strokeStyle = RED; c.lineWidth = 4; c.beginPath(); c.moveTo(-30, 4); c.lineTo(38, -4); c.stroke();
+  const gl = smooth(d * 0.72, d * 0.8, lt) * (1 - smooth(d * 0.85, d, lt));
+  if (gl > 0) { glow('#fff', 30); c.fillStyle = `rgba(255,255,255,${gl})`; c.beginPath(); c.moveTo(30, -60); c.lineTo(36, -20); c.lineTo(76, -14); c.lineTo(36, -8); c.lineTo(30, 32); c.lineTo(24, -8); c.lineTo(-16, -14); c.lineTo(24, -20); c.fill(); noGlow(); }
+  c.restore();
+  rain(lt, 300, 0.28);
+  vignette(0.85);
+};
+
+SC.door = (lt, d, p, S) => {
+  // дверь открывается
+  vgrad([[0, '#0e0c12'], [1, '#1a161e']]);
+  const open = smooth(0.8, 1.4, lt);
+  c.fillStyle = '#d8c8a8'; c.fillRect(190, 260, 700, 1500);  // свет из коридора
+  if (open > 0.3) {
+    c.save(); c.beginPath(); c.rect(190, 260, 700, 1500); c.clip();
+    fill('rgba(255,230,190,0.35)');
+    portrait('nika', W / 2, 980, 2.5, lt, mouthOf(S, lt, 'nika'), {});
+    // осколок в руке
+    const sx = W / 2 + 60, sy = 1640 - Math.sin(lt * 1.5) * 6;
+    c.fillStyle = '#e8e2ea'; c.fillRect(sx - 120, sy - 10, 260, 90); c.fillStyle = '#2a2426'; c.fillRect(sx - 130, sy + 60, 280, 200);
+    c.save(); c.translate(sx, sy - 30); c.rotate(-0.2); c.scale(1.6, 1.6); glow('#fff', 25);
+    c.fillStyle = '#f0ecf2'; c.beginPath(); c.moveTo(-70, -16); c.lineTo(50, -40); c.lineTo(78, 14); c.lineTo(-16, 38); c.fill(); noGlow();
+    c.strokeStyle = RED; c.lineWidth = 7; c.beginPath(); c.moveTo(-52, 6); c.lineTo(64, -6); c.stroke(); c.restore();
+    c.restore();
+  }
+  // створка
+  c.fillStyle = '#3a2a22'; c.save(); c.translate(190, 260); c.scale(1 - open * 0.85, 1); c.fillRect(0, 0, 700, 1500); c.fillStyle = '#c0a060'; c.beginPath(); c.arc(620, 760, 18, 0, 7); c.fill(); c.restore();
+  c.strokeStyle = '#120e10'; c.lineWidth = 30; c.strokeRect(175, 245, 730, 1530);
+  vignette(0.75);
+};
+
+SC.scanner = (lt, d) => {
+  BG.street(lt); fill('rgba(0,0,0,0.55)');
+  c.save(); c.translate(W / 2, 980); c.rotate(-0.08 + Math.sin(lt) * 0.02);
+  c.fillStyle = '#1c1f26'; c.beginPath(); c.roundRect(-260, -420, 520, 840, 40); c.fill();
+  c.strokeStyle = '#3a404c'; c.lineWidth = 8; c.stroke();
+  c.fillStyle = '#04120a'; c.fillRect(-210, -360, 420, 470);
+  c.save(); c.beginPath(); c.rect(-210, -360, 420, 470); c.clip();
+  const sy = -360 + ((lt * 300) % 470);
+  glow('#40ff90', 25); c.fillStyle = 'rgba(64,255,144,0.85)'; c.fillRect(-210, sy, 420, 6); noGlow();
+  c.strokeStyle = 'rgba(64,255,144,0.25)'; c.lineWidth = 2;
+  for (let x = -210; x < 210; x += 30) { c.beginPath(); c.moveTo(x, -360); c.lineTo(x, 110); c.stroke(); }
+  for (let y = -360; y < 110; y += 30) { c.beginPath(); c.moveTo(-210, y); c.lineTo(210, y); c.stroke(); }
+  figure(0, 90, 380, 'man', { t: lt, color: '#062a14', rim: '#40ff90', glow: 12, showEyes: false });
+  c.restore();
+  text('ДЕТЕКТОР ГУЛЕЙ', 0, 190, 40, '#9fffc8', { spacing: 4 });
+  text(`${(lt * 0.5).toFixed(2)} c`, 0, 260, 56, '#40ff90');
+  for (let i = 0; i < 3; i++) { c.fillStyle = ['#ff3040', '#ffc030', '#40ff90'][i]; c.beginPath(); c.arc(-100 + i * 100, 350, 22, 0, 7); c.fill(); }
+  c.restore();
+  vignette(0.8);
+};
+
+SC.owl = (lt, d, p, S) => {
+  BG.roof(lt);
+  fill('rgba(0,0,0,0.25)');
+  // Сова сидит на перилах
+  c.strokeStyle = '#1a1820'; c.lineWidth = 16; c.beginPath(); c.moveTo(0, 1470); c.lineTo(W, 1470); c.stroke();
+  portrait('sova', W / 2, 960, 2.6, lt, mouthOf(S, lt, 'sova'), {});
+  // перья, летящие по ветру
+  c.fillStyle = 'rgba(220,190,140,0.7)';
+  for (let i = 0; i < 12; i++) { const u = (lt * 0.2 + hash(i)) % 1; c.save(); c.translate(u * W * 1.2 - 100, 300 + hash(i + 4) * 1200 + Math.sin(lt * 2 + i) * 40); c.rotate(lt + i); c.beginPath(); c.ellipse(0, 0, 18, 5, 0, 0, 7); c.fill(); c.restore(); }
+  vignette(0.75);
+};
+
+SC.hunger = (lt, d) => {
+  fill('#070405');
+  const pulse = Math.pow(Math.abs(Math.sin(lt * 1.8)), 5);
+  c.save(); shake(pulse * 12, lt);
+  BG.room(lt); fill('rgba(0,0,0,0.5)');
+  figure(W / 2, 1650, 1000, 'mark', { t: lt, pose: 'hunch', glow: 20 + 40 * pulse, eyes: ['kakugan', 'kakugan'] });
+  c.restore();
+  fill(`rgba(150,0,20,${0.15 + 0.3 * pulse})`);
+  const days = ['ДЕНЬ 1', 'ДЕНЬ 2', 'ДЕНЬ 3'], di = Math.min(2, Math.floor(lt / (d / 3)));
+  text(days[di], W / 2, 420, 120, '#fff', { stroke: 12, glow: RED, blur: 30, spacing: 8 });
+  ['ЕШЬ', 'ГОЛОД', 'ЕШЬ', 'НЕТ'].forEach((w, i) => { const a = clamp(Math.sin(lt * 1.4 + i * 1.6)) * 0.55; text(w, 200 + (i % 2) * 680, 700 + i * 260, 70, `rgba(255,40,60,${a})`, { spacing: 10 }); });
+  if (lt > 3 && lt < 3.35) for (let i = 0; i < 10; i++) { const y = hash(i + Math.floor(lt * 30)) * H; c.drawImage(cv, 0, y, W, 40, (hash(i * 5) - 0.5) * 120, y, W, 40); }
+  vignette(0.9, '30,0,5');
+};
+
+SC.checkpoint = (lt, d, p) => {
+  BG.street(lt);
+  // очередь
+  for (let i = 0; i < 5; i++) figure(120 + i * 60, 1560 - i * 30, 420 - i * 30, 'man', { t: lt + i, facing: 1, rim: '#556', showEyes: false });
+  const nikaStage = p.stage === 'nika';
+  figure(820, 1650, 720, 'grach', { t: lt, facing: -1, glow: 24, arm: 'forward' });
+  for (let i = 0; i < 2; i++) figure(980 - i * 90, 1500 - i * 20, 480, 'white', { t: lt + i, facing: -1, glow: 12, showEyes: false });
+  const who = nikaStage ? 'nika' : 'mark';
+  figure(470, 1700, 760, who, { t: lt, facing: 1, glow: 20 });
+  // луч сканера
+  const on = smooth(0.4, 0.8, lt);
+  const res = nikaStage ? lt > 1.8 : lt > 2.5;
+  const col = res ? (nikaStage ? '#ff2030' : '#40ff80') : '#9fffc8';
+  c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = on;
+  const g = c.createLinearGradient(700, 1180, 470, 1180); g.addColorStop(0, rgba(col, 0.6)); g.addColorStop(1, rgba(col, 0));
+  c.fillStyle = g; c.beginPath(); c.moveTo(700, 1170); c.lineTo(420, 900 + Math.sin(lt * 3) * 200); c.lineTo(420, 1300 + Math.sin(lt * 3) * 200); c.fill();
+  c.restore();
+  if (res) {
+    const blink = nikaStage ? (Math.sin(lt * 12) > 0 ? 1 : 0.3) : 1;
+    c.save(); c.globalAlpha = blink;
+    fitText(nikaStage ? 'ГУЛЬ ОБНАРУЖЕН' : 'ЧЕЛОВЕК', W / 2, 520, 110, 940, col, { stroke: 12, glow: col, blur: 40, spacing: 4 });
+    c.restore();
+    if (nikaStage) fill(`rgba(255,0,30,${0.18 * blink})`);
+  }
+  vignette(0.8);
+};
+
+SC.roof = (lt, d, p) => {
+  BG.roof(lt);
+  // вертолётный прожектор
+  const sx = W / 2 + Math.sin(lt * 0.9) * 200;
+  c.save(); c.globalCompositeOperation = 'lighter';
+  const g = c.createLinearGradient(sx, 0, sx, 1500); g.addColorStop(0, 'rgba(230,240,255,0.5)'); g.addColorStop(1, 'rgba(230,240,255,0.1)');
+  c.fillStyle = g; c.beginPath(); c.moveTo(sx - 40, 0); c.lineTo(sx + 40, 0); c.lineTo(sx + 300, 1600); c.lineTo(sx - 300, 1600); c.fill(); c.restore();
+  figure(W / 2, 1500, 560, 'nika', { t: lt, facing: 1, glow: 25, pose: 'crouch' });
+  for (let i = 0; i < 3; i++) figure(150 + i * 390, 1900, 640, 'white', { t: lt, facing: i ? -1 : 1, glow: 14, arm: 'forward', showEyes: false });
+  // красные точки прицелов
+  for (let i = 0; i < 5; i++) { glow(RED, 20); c.fillStyle = RED; c.beginPath(); c.arc(W / 2 + Math.sin(lt * 2 + i * 2) * 60, 1200 + Math.cos(lt * 1.7 + i) * 120, 8, 0, 7); c.fill(); noGlow(); }
+  vignette(0.85);
+};
+
+SC.duel = (lt, d) => {
+  BG.roof(lt);
+  const beat = 0.75, bi = Math.floor(lt / beat), bt = (lt % beat) / beat;
+  c.save(); shake(Math.max(0, 1 - bt * 4) * 30, lt + bi);
+  const gx = W * 0.68, mx = W * 0.3, gy = 1560;
+  const hit = bi % 2 === 0 ? Math.sin(Math.PI * clamp(bt * 1.6)) : 0;
+  kagune(mx, gy - 380, { n: 4, t: lt, len: 800, base: -1.0, spread: 0.6, width: 50, target: { x: gx, y: gy - 450, k: hit }, wiggle: 1.5, blur: 35 });
+  figure(mx, gy, 720, 'mark', { t: lt, pose: 'crouch', facing: 1, glow: 30, eyes: ['kakugan', 'kakugan'] });
+  figure(gx, gy, 760, 'grach', { t: lt, pose: 'strike', facing: -1, arm: 'forward', glow: 26 });
+  const sw = bi % 2 === 1 ? -2 + 2.4 * easeOut(bt * 1.5) : -0.4;
+  blade(gx - 240, gy - 500, Math.PI + sw, 480, lt);
+  c.restore();
+  if (bt < 0.12) fill(`rgba(255,255,255,${0.3 * (1 - bt / 0.12)})`);
+  speedLines(lt, 40, 0.1);
+  vignette(0.85);
+};
+
+SC.wings = (lt, d) => {
+  BG.roof(lt); fill('rgba(0,10,30,0.35)');
+  const k = easeOut(smooth(0.2, 1.6, lt));
+  const g = c.createRadialGradient(W / 2, 1050, 20, W / 2, 1050, 1000); g.addColorStop(0, `rgba(120,210,255,${0.6 * k})`); g.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+  c.save(); shake((1 - smooth(0.2, 1.4, lt)) * 18, lt);
+  wings(W / 2, 1050, lt, BLUE, 3.3 * k);
+  wings(W / 2, 1060, lt + 1, '#c8f0ff', 2.4 * k);
+  portrait('nika', W / 2, 1100, 2.3, lt, 0, { kakugan: true });
+  c.restore();
+  for (let i = 0; i < 30; i++) { const u = (lt * 0.4 + hash(i)) % 1; c.fillStyle = `rgba(200,240,255,${(1 - u) * 0.8})`; c.fillRect(hash(i * 3) * W, 1500 - u * 1400, 4, 12); }
+  if (lt > 0.25 && lt < 0.4) fill('rgba(200,240,255,0.5)');
+  vignette(0.8);
+};
+
+SC.dawn = (lt, d, p) => {
+  vgrad([[0, '#241638'], [0.45, '#8a3a50'], [0.7, '#f08048'], [1, '#ffc880']]);
+  const g = c.createRadialGradient(W / 2, 1300, 10, W / 2, 1300, 900); g.addColorStop(0, 'rgba(255,240,200,1)'); g.addColorStop(0.2, 'rgba(255,200,120,0.6)'); g.addColorStop(1, 'rgba(255,150,80,0)');
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  city(lt, { y: 1450, pan: 400 + lt * 4, dawn: true });
+  c.fillStyle = '#1a0e14'; c.fillRect(0, 1440, W, 480);
+  const z = p.close ? 1.5 + lt * 0.02 : 1;
+  c.save(); c.translate(W / 2, 1440); c.scale(z, z);
+  figure(-90, 0, 560, 'mark', { t: lt, pose: 'sit', facing: 1, glow: 14, rim: '#ffd0a0' });
+  figure(90, 0, 520, 'nika', { t: lt + 1, pose: 'sit', facing: -1, glow: 14, rim: '#ffd0a0' });
+  c.restore();
+  for (let i = 0; i < 7; i++) { const x = ((lt * 40 + i * 160) % (W + 200)) - 100, y = 500 + Math.sin(lt + i) * 30 + i * 25, f = Math.sin(lt * 8 + i) * 12;
+    c.strokeStyle = '#2a1820'; c.lineWidth = 4; c.beginPath(); c.moveTo(x - 20, y + f); c.quadraticCurveTo(x - 8, y - 6, x, y); c.quadraticCurveTo(x + 8, y - 6, x + 20, y + f); c.stroke(); }
+  vignette(0.55, '40,10,10');
+};
+
+SC.end = (lt, d, p) => {
+  fill('#030001');
+  kagune(W / 2, H + 80, { n: 5, t: lt, len: 1100 * easeOut(lt / 1.2), spread: 1.0, width: 60, blur: 45 });
+  fill('rgba(0,0,0,0.45)');
+  const a = smooth(0.1, 0.5, lt);
+  c.save(); c.globalAlpha = a;
+  if (p.next) {
+    text('ПРОДОЛЖЕНИЕ', W / 2, 640, 74, '#fff', { stroke: 10, spacing: 8 });
+    text(`ЧАСТЬ ${p.next}`, W / 2, 800, 190, RED, { stroke: 14, glow: RED, blur: 50, spacing: 6 });
+    text(`«${p.name}»`, W / 2, 960, 80, '#fff', { stroke: 10 });
+  } else {
+    text('КОНЕЦ', W / 2, 640, 110, '#fff', { stroke: 10, spacing: 14 });
+    text(p.name, W / 2, 820, 170, RED, { stroke: 14, glow: RED, blur: 50 });
+    text('ПИШИ В КОММЕНТАХ', W / 2, 980, 70, '#fff', { stroke: 10, spacing: 4 });
+  }
+  c.restore();
+  const b = smooth(1.0, 1.4, lt), bounce = Math.abs(Math.sin(lt * 4)) * 14;
+  c.save(); c.globalAlpha = b;
+  c.fillStyle = RED; c.beginPath(); c.roundRect(W / 2 - 300, 1160 - bounce, 600, 130, 65); c.fill();
+  text('ПОДПИШИСЬ', W / 2, 1225 - bounce, 70, '#fff', { spacing: 4 });
+  c.restore();
+  vignette(0.85);
+};
+
+// ---------- субтитры «караоке» ----------
+function captions(S, T) {
+  const ln = S.lines.find(l => T >= l.t0 - 0.05 && T <= l.t1 + 0.25);
+  if (!ln) return;
+  // группы по 2–4 слова (не длиннее ~18 знаков)
+  const groups = []; let g = [];
+  ln.words.forEach(w => { const len = g.reduce((s, x) => s + x[0].length + 1, 0); if (g.length && (len + w[0].length > 18 || g.length >= 4)) { groups.push(g); g = []; } g.push(w); });
+  if (g.length) groups.push(g);
+  let gi = groups.findIndex(gr => T < gr[gr.length - 1][2] + 0.05);
+  if (gi < 0) gi = groups.length - 1;
+  const gr = groups[gi];
+  const y = 1400;
+  c.save();
+  c.font = 'bold 84px "DejaVu Sans", sans-serif';
+  const words = gr.map(w => w[0].toUpperCase());
+  const widths = words.map(w => c.measureText(w + ' ').width);
+  const total = widths.reduce((a, b) => a + b, 0);
+  const scale = Math.min(1, 900 / total);
+  let x = W / 2 - total * scale / 2;
+  const popT = T - gr[0][1];
+  const pop = 1 + 0.12 * clamp(1 - popT * 8);
+  c.translate(W / 2, y); c.scale(scale * pop, scale * pop); c.translate(-W / 2, -y);
+  x = W / 2 - total / 2;
+  gr.forEach((w, i) => {
+    const active = T >= w[1] - 0.03 && T < (gr[i + 1] ? gr[i + 1][1] : w[2] + 0.3);
+    const col = active ? (ln.who === 'narr' ? '#ffd23a' : ln.color) : '#ffffff';
+    c.lineWidth = 16; c.strokeStyle = '#000'; c.lineJoin = 'round'; c.textAlign = 'left'; c.textBaseline = 'middle';
+    c.strokeText(words[i], x, y);
+    if (active) glow(col, 25);
+    c.fillStyle = col; c.fillText(words[i], x, y); noGlow();
+    x += widths[i];
+  });
+  c.restore();
+  if (ln.name) text(ln.name, W / 2, y - 105, 46, ln.color, { stroke: 8, spacing: 8, glow: ln.color, blur: 14 });
+}
+
+window.setTL = tl => { TL = tl; FPS = tl.fps; };
+window.draw = frame => {
+  const T = frame / FPS;
+  const S = TL.shots.find(s => T >= s.t0 && T < s.t1) || TL.shots[TL.shots.length - 1];
+  const lt = T - S.t0, d = S.t1 - S.t0;
+  c.save(); noGlow(); (SC[S.scene] || (() => fill('#000')))(lt, d, S.p || {}, S); c.restore();
+  // зерно
+  c.save(); c.globalAlpha = 0.06; c.globalCompositeOperation = 'overlay'; c.fillStyle = grains[frame % 3];
+  c.translate((frame * 37) % 256, (frame * 91) % 256); c.fillRect(-256, -256, W + 512, H + 512); c.restore();
+  // быстрая склейка: короткая вспышка-затемнение
+  const f = Math.min(clamp(lt / 0.12), clamp((d - lt) / 0.12));
+  if (f < 1) { c.fillStyle = `rgba(0,0,0,${(1 - f) * 0.8})`; c.fillRect(0, 0, W, H); }
+  // плашка части
+  c.save(); c.fillStyle = 'rgba(0,0,0,0.55)'; c.beginPath(); c.roundRect(40, 190, 330, 76, 18); c.fill();
+  text(`ОХОТНИЦА · ${TL.id}/3`, 205, 229, 36, '#fff', { spacing: 2 }); c.restore();
+  captions(S, T);
+};
+</script></body></html>
