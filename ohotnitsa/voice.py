@@ -58,8 +58,15 @@ def stress(text):
     except Exception as e:  # без пакета — синтез без подсказок
         print("  ! silero_stress недоступен:", e)
         return text
-    # Silero ставит «+» перед ударной гласной -> гласная + знак ударения
-    return re.sub(r"\+([аеёиоуыэюяАЕЁИОУЫЭЮЯ])", lambda m: m.group(1) + ACUTE, marked)
+    # Silero ставит «+» перед ударной гласной -> гласная + знак ударения.
+    # Односложным словам («на», «не», «и») ударение не ставим — иначе речь рубленая.
+    # Слова с «ё» и так ударные.
+    def word(m):
+        w = m.group(0); plain = w.replace("+", "")
+        if len(re.findall(r"[аеёиоуыэюя]", plain.lower())) < 2 or "ё" in plain.lower():
+            return plain
+        return re.sub(r"\+([аеиоуыэюяАЕИОУЫЭЮЯ])", lambda v: v.group(1) + ACUTE, w)
+    return re.sub(r"[+А-Яа-яЁё]+", word, marked)
 
 # ---------- синтез ----------
 _voices = {}
